@@ -57,17 +57,18 @@ st.markdown("""
 # --- HELPER FUNCTIONS ---
 @st.cache_data
 def load_data_from_gsheets(sheet_id):
-    """Loads data from a public Google Sheet."""
+    """Loads data from a public Google Sheet for the demo."""
     try:
-        # Construct the URL to export the sheet as CSV
-        # Note: The new sheet is named 'Sales'
+        # Construct the URL to export the sheet as CSV.
+        # The demo sheet is named 'Sales'.
         url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&sheet=Sales"
         df = pd.read_csv(url)
         
-        # Convert 'date' column to datetime objects
+        # Process the new columns: 'date', 'store', 'sales'
         df['date'] = pd.to_datetime(df['date'])
+        df['sales'] = pd.to_numeric(df['sales'])
 
-        # Create new date-related columns for filtering and analysis
+        # Create new date-related columns in English for filtering and analysis
         df['year'] = df['date'].dt.year
         df['month_num'] = df['date'].dt.month
         df['day_of_week'] = df['date'].dt.day_name()
@@ -77,6 +78,7 @@ def load_data_from_gsheets(sheet_id):
         return df
     except Exception as e:
         st.error(f"Error loading data from Google Sheets: {e}")
+        st.info("Please ensure the Google Sheet is public ('Anyone with the link can view') and the tab is named 'Sales'.")
         return None
 
 
@@ -86,7 +88,6 @@ def create_heatmap(df, title):
         st.info(f"No data available to generate heatmap: {title}")
         return None
     
-    # Define the order of days for the heatmap
     ordered_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     
     heatmap_data = df.pivot_table(
@@ -109,7 +110,6 @@ def create_stats_barchart(df, title):
         st.info(f"No data available to generate stats chart: {title}")
         return None
         
-    # Exclude days with zero sales for a fair calculation of operational day performance
     df_operating_days = df[df['sales'] > 0]
     
     stats = df_operating_days.groupby('store')['sales'].agg(['mean', 'median']).reset_index()
@@ -138,12 +138,11 @@ def create_stats_barchart(df, title):
 
 
 # --- DATA LOADING ---
-# New Google Sheet ID for the demo version
+# The Google Sheet ID for your public demo data
 sheet_id = "1kuzTBPdCy-42EWyIAjHP_Fi6klavRA7PyjoEfbuxCC0"
 df_original = load_data_from_gsheets(sheet_id)
 
 if df_original is None:
-    st.warning("Could not load data. Please check the Google Sheets link and permissions.")
     st.stop()
 
 # --- SIDEBAR WITH FILTERS ---
@@ -156,7 +155,6 @@ st.sidebar.header("Main Period")
 min_date = df_original['date'].min().to_pydatetime()
 max_date = df_original['date'].max().to_pydatetime()
 
-# Default date range logic
 default_start_date = (max_date - pd.DateOffset(months=6)).date()
 if default_start_date < min_date.date():
     start_value = min_date
@@ -171,16 +169,13 @@ start_date_1, end_date_1 = st.sidebar.date_input(
     key="period1"
 )
 
-# Filter data for the main period
 df_period_1 = df_original[
     (df_original['date'].between(pd.to_datetime(start_date_1), pd.to_datetime(end_date_1)))
 ]
 
-# --- Comparison Period Logic ---
 df_period_2 = pd.DataFrame()
 if compare_mode:
     st.sidebar.header("Comparison Period")
-    # Default comparison period is the same range, one year prior
     default_start_2 = start_date_1 - pd.DateOffset(years=1)
     default_end_2 = end_date_1 - pd.DateOffset(years=1)
 
@@ -201,7 +196,6 @@ selected_stores = st.sidebar.multiselect(
     "Select stores:", options=all_stores, default=all_stores
 )
 
-# Apply store filter to both dataframes
 df_period_1 = df_period_1[df_period_1['store'].isin(selected_stores)]
 if not df_period_2.empty:
     df_period_2 = df_period_2[df_period_2['store'].isin(selected_stores)]
@@ -345,7 +339,6 @@ with tab3:
     st.header("Detailed Data Explorer")
     st.markdown("Data from the **main period**. You can sort and search.")
     
-    # Prepare dataframe for display
     df_display = df_period_1[['date', 'store', 'sales', 'day_of_week']].copy()
     df_display['sales'] = df_display['sales'].apply(lambda x: f"${x:,.0f}")
     df_display['date'] = df_display['date'].dt.strftime('%d/%m/%Y')
